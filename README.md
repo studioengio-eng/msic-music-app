@@ -18,6 +18,12 @@
   <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square"/>
 </p>
 
+<p align="center">
+  <a href="https://github.com/studioengio-eng/msic-music-app/raw/main/releases/Msic%201.0.apk">
+    <img src="https://img.shields.io/badge/Download_APK-Msic_1.0-4CAF50?style=for-the-badge&logo=android" alt="Download APK"/>
+  </a>
+</p>
+
 ---
 
 ## ✨ Características
