@@ -96,4 +96,4 @@ msic/
 
 ## 📜 Licencia
 
-MIT © 2025 — Msic Contributors
+MIT © 2026 — Msic Contributors
