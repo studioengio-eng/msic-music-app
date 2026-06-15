@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-get-audio-url"
+description = "Allows getAudioUrl command"
+commands.allow = ["getAudioUrl"]

@@ -1,0 +1,38 @@
+fn main() {
+  tauri_build::try_build(
+    tauri_build::Attributes::new().plugin(
+      "player",
+      tauri_build::InlinedPlugin::new()
+        .commands(&[
+          "searchYouTube",
+          "getAudioUrl",
+          "playAudio",
+          "getPlaybackProgress",
+          "seekPlayback",
+          "pausePlayback",
+          "resumePlayback",
+          "stopPlayback",
+          "setRadioPrefetch",
+          "setRadioQueue",
+          "clearRadioPrefetch",
+          "getNowPlaying",
+          "getRadioQueueSize",
+          "importYouTubePlaylist",
+          "openMediaRouter",
+          "openOutputSwitcher",
+          "searchLastFm",
+          "searchLastFmSmart",
+          "searchLastFmSuggestions",
+          "requestBluetoothPermission",
+          "getActiveAudioDevice",
+          "getPairedBluetoothDevices",
+          "openBluetoothSettings",
+          "switchToSpeaker",
+          "connectToBluetoothDevice",
+          "setAutoplayEnabled",
+        ])
+        .default_permission(tauri_build::DefaultPermissionRule::AllowAllCommands),
+    ),
+  )
+  .expect("failed to run build script");
+}

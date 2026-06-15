@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-play-audio"
+description = "Allows playAudio command"
+commands.allow = ["playAudio"]

@@ -1,0 +1,41 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "default",
+  "description": "Default capability",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "allow-get-audio-url",
+    "player:default",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "https://itunes.apple.com/*" },
+        { "url": "https://*.apple.com/*" },
+        { "url": "https://*.mzstatic.com/*" },
+        { "url": "https://youtube.com/*" },
+        { "url": "https://www.youtube.com/*" },
+        { "url": "https://*.youtube.com/*" },
+        { "url": "https://youtu.be/*" },
+        { "url": "https://i.ytimg.com/*" },
+        { "url": "https://images.unsplash.com/*" },
+        { "url": "https://*.googlevideo.com/*" },
+        { "url": "https://rr*.googlevideo.com/*" },
+        { "url": "https://open.spotify.com/*" },
+        { "url": "https://*.spotify.com/*" },
+        { "url": "https://embed.spotify.com/*" },
+        { "url": "https://*.scdn.co/*" },
+        { "url": "https://music.apple.com/*" },
+        { "url": "https://*.music.apple.com/*" },
+        { "url": "https://embed.music.apple.com/*" },
+        { "url": "https://*.embed.music.apple.com/*" },
+        { "url": "https://cdn-icons-png.flaticon.com/*" },
+        { "url": "https://lrclib.net/*" },
+        { "url": "https://pipedapi.com/*" },
+        { "url": "https://pipedapi.kavin.rocks/*" },
+        { "url": "https://api.piped.projectsegfau.lt/*" },
+        { "url": "https://www.youtube.com/youtubei/*" }
+      ]
+    }
+  ]
+}

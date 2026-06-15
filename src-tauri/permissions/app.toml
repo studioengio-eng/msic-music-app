@@ -1,0 +1,17 @@
+[default]
+description = "Permite el uso de todos los comandos de la aplicación"
+permissions = [
+  "allow-get-music-files",
+  "allow-search-and-get-audio",
+  "allow-get-audio-url"
+]
+
+[[permission]]
+identifier = "allow-get-music-files"
+description = "Permite listar archivos de música locales"
+commands.allow = ["get_music_files"]
+
+[[permission]]
+identifier = "allow-search-and-get-audio"
+description = "Permite buscar y obtener audio via yt-dlp"
+commands.allow = ["search_and_get_audio"]

@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-get-audio-url"
+description = "Allows get_audio_url rust command"
+commands.allow = ["get_audio_url"]

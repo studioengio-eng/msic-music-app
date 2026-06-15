@@ -1,0 +1,57 @@
+# ─── Node / Next.js ───────────────────────────────────────────────────────────
+node_modules/
+.next/
+/out/
+/build
+*.tsbuildinfo
+next-env.d.ts
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# ─── Rust / Tauri ─────────────────────────────────────────────────────────────
+/src-tauri/target/
+
+# ─── Android build artefacts ──────────────────────────────────────────────────
+/src-tauri/gen/android/.gradle/
+/src-tauri/gen/android/build/
+/src-tauri/gen/android/app/build/
+/src-tauri/gen/android/app/src/main/jniLibs/
+/src-tauri/gen/android/app/.cxx/
+*.apk
+*.aab
+
+# ─── Local dev / secrets ──────────────────────────────────────────────────────
+.env*
+*.pem
+.DS_Store
+
+# ─── Debug logs ───────────────────────────────────────────────────────────────
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ─── Editor / OS ──────────────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.iml
+Thumbs.db
+
+# ─── Temp / scratch ───────────────────────────────────────────────────────────
+tmp_adb/
+A
+Get
+Run
+Compilation
+resize_icon.ps1
+
+# ─── Large binary assets (yt-dlp etc.) ────────────────────────────────────────
+**/assets/binaries/
+
+# ─── Stale src/main generated artifacts ───────────────────────────────────────
+/src/main/
