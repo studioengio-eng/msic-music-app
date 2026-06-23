@@ -19,8 +19,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/studioengio-eng/msic-music-app/raw/main/releases/Msic%201.0.apk">
-    <img src="https://img.shields.io/badge/Download_APK-Msic_1.0-4CAF50?style=for-the-badge&logo=android" alt="Download APK"/>
+  <a href="https://github.com/studioengio-eng/msic-music-app/raw/main/releases/msic%201.1.apk">
+    <img src="https://img.shields.io/badge/Download_APK-Msic_1.1-4CAF50?style=for-the-badge&logo=android" alt="Download APK"/>
   </a>
 </p>
 
@@ -30,7 +30,7 @@
 
 - 🎵 **Radio infinita** — basada en iTunes, que siempre encuentra más música del artista que estás escuchando sin repetirse
 - 🔍 **Búsqueda libre** — busca cualquier canción, álbum o artista sin restricciones
-- 📋 **Importación de playlists** — importa desde Spotify (Apple Music y YouTube Music en desarrollo)
+- 📋 **Importación de playlists** — importa desde Spotify, Apple Music y YouTube Music
 - 🔁 **Modos de repetición** — Repetir 1, Repetir todo o desactivado
 - 🔀 **Shuffle** — mezcla tu cola de reproducción
 - 🎨 **UI premium** — diseño oscuro con glassmorphism y animaciones fluidas
