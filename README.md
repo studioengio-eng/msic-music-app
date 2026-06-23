@@ -30,7 +30,7 @@
 
 - 🎵 **Radio infinita** — basada en iTunes, que siempre encuentra más música del artista que estás escuchando sin repetirse
 - 🔍 **Búsqueda libre** — busca cualquier canción, álbum o artista sin restricciones
-- 📋 **Importación de playlists** — importa desde Spotify, Apple Music y YouTube Music
+- 📋 **Importación de playlists** — importa desde Spotify y YouTube Music (Apple Music en desarrollo)
 - 🔁 **Modos de repetición** — Repetir 1, Repetir todo o desactivado
 - 🔀 **Shuffle** — mezcla tu cola de reproducción
 - 🎨 **UI premium** — diseño oscuro con glassmorphism y animaciones fluidas
