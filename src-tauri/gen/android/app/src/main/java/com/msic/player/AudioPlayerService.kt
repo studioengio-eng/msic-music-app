@@ -147,16 +147,27 @@ class AudioPlayerService : MediaSessionService() {
                     controller: MediaSession.ControllerInfo,
                     playerCommand: Int
                 ): Int {
-                    // Route skip commands from lock screen / notification to JS bridge
+                    // Route skip commands from lock screen / notification
                     when (playerCommand) {
                         Player.COMMAND_SEEK_TO_NEXT,
                         Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM -> {
-                            PlaybackBridge.onSkipNext()
+                            if (QueueManager.hasNext(forceNext = true)) {
+                                PlayerManager.playNextInQueue(forceNext = true)
+                                PlaybackBridge.notifyTrackChanged()
+                            } else {
+                                PlaybackBridge.onSkipNext()
+                            }
                             return SessionResult.RESULT_SUCCESS
                         }
                         Player.COMMAND_SEEK_TO_PREVIOUS,
                         Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> {
-                            PlaybackBridge.onSkipPrevious()
+                            val prev = QueueManager.previousTrack()
+                            if (prev != null) {
+                                PlayerManager.playTrack(prev)
+                                PlaybackBridge.notifyTrackChanged()
+                            } else {
+                                PlaybackBridge.onSkipPrevious()
+                            }
                             return SessionResult.RESULT_SUCCESS
                         }
                     }

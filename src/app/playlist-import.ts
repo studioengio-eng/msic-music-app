@@ -69,6 +69,21 @@ function normalizePlaylistUrl(raw: string): string {
   return url;
 }
 
+function decodeJsEscapes(str: string): string {
+  return str.replace(/\\x([0-9A-Fa-f]{2})/g, (_, hex) => {
+    return String.fromCharCode(parseInt(hex, 16));
+  }).replace(/\\u([0-9A-Fa-f]{4})/g, (_, hex) => {
+    return String.fromCharCode(parseInt(hex, 16));
+  }).replace(/\\(.)/g, (_, char) => {
+    if (char === 'n') return '\n';
+    if (char === 'r') return '\r';
+    if (char === 't') return '\t';
+    if (char === 'b') return '\b';
+    if (char === 'f') return '\f';
+    return char;
+  });
+}
+
 function parseYouTubeFromHtml(html: string): ImportedPlaylist | null {
   const found: ImportedTrack[] = [];
   const seen = new Set<string>();
@@ -82,6 +97,32 @@ function parseYouTubeFromHtml(html: string): ImportedPlaylist | null {
   const collectRenderer = (node: unknown) => {
     if (!node || typeof node !== 'object') return;
     const obj = node as Record<string, unknown>;
+
+    // Support for YouTube's new lockupViewModel format
+    if (obj.lockupViewModel && typeof obj.lockupViewModel === 'object') {
+      const lvm = obj.lockupViewModel as Record<string, any>;
+      const videoId = String(lvm.contentId || '');
+      const trackTitle = String(lvm.metadata?.lockupMetadataViewModel?.title?.content || '');
+      const artist = String(
+        lvm.metadata?.lockupMetadataViewModel?.metadata?.contentMetadataViewModel?.metadataRows?.[0]?.metadataParts?.[0]?.text?.content || 
+        'Desconocido'
+      );
+      const cover = String(
+        lvm.contentImage?.thumbnailViewModel?.image?.sources?.[0]?.url || 
+        lvm.contentImage?.thumbnailViewModel?.image?.sources?.pop()?.url ||
+        `${YT_IMG}/${videoId}/hqdefault.jpg`
+      );
+
+      if (videoId.length === 11 && trackTitle && !seen.has(videoId)) {
+        seen.add(videoId);
+        found.push({
+          id: videoId,
+          title: trackTitle,
+          artist,
+          cover,
+        });
+      }
+    }
 
     const renderers = [
       obj.playlistVideoRenderer,
@@ -140,6 +181,7 @@ function parseYouTubeFromHtml(html: string): ImportedPlaylist | null {
     }
   };
 
+  // Support for standard YouTube initial data variables
   const markers = ['var ytInitialData = ', 'window["ytInitialData"] = ', 'ytInitialData = '];
   for (const marker of markers) {
     const idx = html.indexOf(marker);
@@ -156,12 +198,26 @@ function parseYouTubeFromHtml(html: string): ImportedPlaylist | null {
     if (found.length > 0) break;
   }
 
+  // Support for YouTube Music initialData.push dynamic scripts
+  if (found.length === 0) {
+    const initialDataRegex = /initialData\.push\(\s*\{\s*path:\s*['"][^'"]+['"],\s*params:\s*JSON\.parse\(['"][^'"]*['"]\),\s*data:\s*['"]([\s\S]+?)['"]\s*\}\s*\)/g;
+    let match;
+    while ((match = initialDataRegex.exec(html)) !== null) {
+      try {
+        const decoded = decodeJsEscapes(match[1]);
+        collectRenderer(JSON.parse(decoded));
+      } catch {
+        /* ignore and continue */
+      }
+    }
+  }
+
+  // Fallback regex videoId matching
   if (found.length === 0) {
     const idRegex = /"videoId":"([a-zA-Z0-9_-]{11})"/g;
-    const titleRegex = /"text":"([^"\\]{2,120})"/g;
     let m: RegExpExecArray | null;
     const ids: string[] = [];
-    while ((m = idRegex.exec(html)) !== null && ids.length < 200) {
+    while ((m = idRegex.exec(html)) !== null && ids.length < 10000) {
       if (!seen.has(m[1])) {
         seen.add(m[1]);
         ids.push(m[1]);
@@ -193,11 +249,31 @@ export async function parseYouTubePlaylist(pageUrl: string): Promise<ImportedPla
     listUrl = url;
   }
 
-  const html = await fetchPageHtml(listUrl);
-  const parsed = parseYouTubeFromHtml(html);
+  let html = '';
+  let parsed: ImportedPlaylist | null = null;
+
+  try {
+    html = await fetchPageHtml(listUrl);
+    parsed = parseYouTubeFromHtml(html);
+  } catch (e) {
+    console.error('Error fetching YouTube playlist directly:', e);
+  }
+
+  // Fallback: If direct fetch failed or parsed 0 tracks, and it was a music.youtube.com link,
+  // try fetching it as a www.youtube.com link.
+  if ((!parsed || parsed.tracks.length === 0) && url.includes('music.youtube.com')) {
+    try {
+      const fallbackUrl = listUrl.replace('music.youtube.com', 'www.youtube.com');
+      const fallbackHtml = await fetchPageHtml(fallbackUrl);
+      parsed = parseYouTubeFromHtml(fallbackHtml);
+    } catch (e) {
+      console.error('Error fetching YouTube playlist fallback:', e);
+    }
+  }
+
   if (!parsed || parsed.tracks.length === 0) {
     throw new Error(
-      'No se pudo leer la playlist de YouTube. Comprueba que sea pública y usa el enlace completo con ?list=',
+      'No se pudo leer la playlist de YouTube/YouTube Music. Comprueba que sea pública y usa el enlace completo con ?list=',
     );
   }
   return parsed;
@@ -326,15 +402,60 @@ export async function parseAppleMusicPlaylist(pageUrl: string): Promise<Imported
       }
     }
 
+    try {
+      const jsonLdRegex = /<script\s+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+      let match;
+      while ((match = jsonLdRegex.exec(html)) !== null) {
+        try {
+          const ld = JSON.parse(match[1]);
+          const entities = Array.isArray(ld) ? ld : [ld];
+          for (const entity of entities) {
+            if (entity['@type'] !== 'MusicPlaylist' && entity['@type'] !== 'MusicAlbum') continue;
+            let trackList = entity.track || entity.tracks;
+            if (trackList?.itemListElement) {
+              trackList = trackList.itemListElement.map((item: { item?: unknown }) => item.item);
+            }
+            if (Array.isArray(trackList)) {
+              for (const t of trackList) {
+                const title = t.name || '';
+                const artist = (Array.isArray(t.byArtist) ? t.byArtist[0]?.name : t.byArtist?.name) || 'Desconocido';
+                pushTrackFromApple(found, seen, title, artist, entity.image || '');
+              }
+            }
+          }
+        } catch {
+          /* next */
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+
     scanAppleJsonStrings(html, found, seen);
   };
 
   const base = normalizePlaylistUrl(pageUrl);
-  const urlsToTry = [
-    base,
-    base.replace('https://music.apple.com', 'https://embed.music.apple.com'),
-    base.includes('?') ? base : `${base}${base.endsWith('/') ? '' : ''}?app=music`,
-  ];
+  const baseUrls: string[] = [base];
+
+  const match = base.match(/music\.apple\.com\/([a-z]{2})\/playlist/i);
+  if (match) {
+    const currentStorefront = match[1];
+    const alternates = ['us', 'mx', 'do', 'es', 'ar', 'co', 'cl', 'pe', 'br'];
+    for (const alt of alternates) {
+      if (alt !== currentStorefront.toLowerCase()) {
+        baseUrls.push(base.replace(`/music.apple.com/${currentStorefront}/`, `/music.apple.com/${alt}/`));
+      }
+    }
+  }
+
+  const urlsToTry: string[] = [];
+  for (const u of baseUrls) {
+    urlsToTry.push(u);
+    urlsToTry.push(u.replace('https://music.apple.com', 'https://embed.music.apple.com'));
+    if (!u.includes('?')) {
+      urlsToTry.push(`${u}${u.endsWith('/') ? '' : ''}?app=music`);
+    }
+  }
 
   for (const tryUrl of urlsToTry) {
     try {

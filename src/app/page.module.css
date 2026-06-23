@@ -14,7 +14,7 @@
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: calc(24px + env(safe-area-inset-top, 32px)) 20px 100px;
+  padding: calc(24px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 20px calc(100px + var(--safe-area-inset-bottom, 0px));
 }
 
 .viewContainer {
@@ -481,7 +481,7 @@
   justify-content: flex-start;
   align-items: center;
   gap: 10px;
-  padding: 16px 12px 24px;
+  padding: 16px 12px calc(24px + var(--safe-area-inset-bottom, 0px));
   z-index: 100;
   pointer-events: none;
 }
@@ -518,7 +518,7 @@
   z-index: 500;
   display: flex;
   flex-direction: column;
-  padding: calc(24px + env(safe-area-inset-top, 32px)) 24px 24px;
+  padding: calc(24px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 24px calc(24px + var(--safe-area-inset-bottom, 0px));
   overflow: hidden;
   background: #000;
 }
@@ -731,7 +731,7 @@
 .playerFooter {
   flex-shrink: 0;
   width: 100%;
-  padding-bottom: env(safe-area-inset-bottom, 8px);
+  padding-bottom: calc(8px + var(--safe-area-inset-bottom, 0px));
 }
 
 .playerArtWrap {
@@ -1223,7 +1223,7 @@
 /* ─── MINI PLAYER (VINYL) ─── */
 .miniPlayer {
   position: fixed;
-  bottom: 84px;
+  bottom: calc(84px + var(--safe-area-inset-bottom, 0px));
   right: 20px;
   width: 76px;
   height: 52px;

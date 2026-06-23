@@ -54,8 +54,8 @@ html::before {
   top: 0;
   left: 0;
   right: 0;
-  height: env(safe-area-inset-top, 0px);
-  background-color: var(--bg-primary); /* #000000 */
+  height: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  background-color: transparent;
   z-index: 9999;
 }
 

@@ -38,6 +38,7 @@ object QueueManager {
     private var currentIndex = -1
     private var isShuffled = false
     private val shuffleOrder = mutableListOf<Int>()
+    private var repeatMode = "off"
 
     private const val MAX_HISTORY_SIZE = 100
     private const val MAX_AUTOPLAY_BUFFER = 4
@@ -115,9 +116,25 @@ object QueueManager {
     }
 
     @Synchronized
-    fun nextTrack(): TrackInfo? {
+    fun replaceUpcomingNoDeduplicate(tracks: List<TrackInfo>) {
+        val keepUntil = currentIndex.coerceAtLeast(-1) + 1
+        while (queue.size > keepUntil) {
+            queue.removeAt(queue.lastIndex)
+        }
+        queue.addAll(tracks)
+    }
+
+    @Synchronized
+    fun nextTrack(forceNext: Boolean = false): TrackInfo? {
         val current = getCurrentTrack()
-        if (current != null) addToHistory(current)
+        if (current != null && !forceNext) {
+            if (repeatMode == "one") {
+                return current
+            }
+        }
+        if (current != null) {
+            addToHistory(current)
+        }
 
         return if (isShuffled) nextShuffled() else nextSequential()
     }
@@ -127,6 +144,9 @@ object QueueManager {
         return if (nextIdx in queue.indices) {
             currentIndex = nextIdx
             queue[nextIdx]
+        } else if (repeatMode == "all" && queue.isNotEmpty()) {
+            currentIndex = 0
+            queue[0]
         } else null
     }
 
@@ -134,8 +154,14 @@ object QueueManager {
         // Find current queue-index position inside shuffleOrder, then advance
         val posInOrder = shuffleOrder.indexOf(currentIndex)
         if (posInOrder < 0) return null
-        val nextPos = posInOrder + 1
-        if (nextPos !in shuffleOrder.indices) return null
+        var nextPos = posInOrder + 1
+        if (nextPos !in shuffleOrder.indices) {
+            if (repeatMode == "all" && shuffleOrder.isNotEmpty()) {
+                nextPos = 0
+            } else {
+                return null
+            }
+        }
         val nextQueueIdx = shuffleOrder[nextPos]
         currentIndex = nextQueueIdx
         return queue.getOrNull(nextQueueIdx)
@@ -151,7 +177,9 @@ object QueueManager {
     }
 
     @Synchronized
-    fun hasNext(): Boolean {
+    fun hasNext(forceNext: Boolean = false): Boolean {
+        if (repeatMode == "one" && !forceNext) return true
+        if (repeatMode == "all" && queue.isNotEmpty()) return true
         return if (isShuffled) {
             shuffleOrder.indexOf(currentIndex) + 1 < shuffleOrder.size
         } else {
@@ -226,6 +254,14 @@ object QueueManager {
 
     @Synchronized
     fun isShuffleEnabled(): Boolean = isShuffled
+
+    @Synchronized
+    fun setRepeatMode(mode: String) {
+        repeatMode = mode
+    }
+
+    @Synchronized
+    fun getRepeatMode(): String = repeatMode
 
     @Synchronized
     fun queueSize(): Int = queue.size

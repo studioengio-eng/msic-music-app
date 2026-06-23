@@ -306,6 +306,19 @@ class PlayerPlugin(private val activity: Activity) : Plugin(activity) {
     }
 
     @Command
+    fun setPlaylistQueue(invoke: Invoke) {
+        val payload = invoke.parseArgs(RadioQueueJsonArgs::class.java)
+        try {
+            val items = JSONArray(payload.itemsJson)
+            val tracks = parseQueueItems(items)
+            QueueManager.replaceUpcomingNoDeduplicate(tracks)
+        } catch (e: Exception) {
+            Log.e("PlayerPlugin", "Error setting playlist queue: ${e.message}")
+        }
+        invoke.resolve()
+    }
+
+    @Command
     fun setRadioPrefetch(invoke: Invoke) {
         val args = invoke.parseArgs(PlayAudioArgs::class.java)
         if (args.url.isBlank() && args.title.isBlank()) {
@@ -501,8 +514,10 @@ class PlayerPlugin(private val activity: Activity) : Plugin(activity) {
     @Command
     fun setRepeatMode(invoke: Invoke) {
         val args = invoke.parseArgs(RepeatModeArgs::class.java)
-        // AutoPlayManager is deprecated
-        // AutoPlayManager.setRepeatMode(args.mode)
+        QueueManager.setRepeatMode(args.mode)
+        activity.runOnUiThread {
+            PlayerManager.setRepeatMode(args.mode)
+        }
         invoke.resolve()
     }
 }
@@ -512,6 +527,49 @@ class MainActivity : TauriActivity() {
         super.onWebViewCreate(webView)
         PlaybackBridge.register(webView)
         AudioOutputManager.initialize(this)
+
+        try {
+            val window = this.window
+            androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
+            window.statusBarColor = android.graphics.Color.TRANSPARENT
+            window.navigationBarColor = android.graphics.Color.TRANSPARENT
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                window.isStatusBarContrastEnforced = false
+                window.isNavigationBarContrastEnforced = false
+            }
+
+            val insetsController = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
+            insetsController.isAppearanceLightStatusBars = false
+            insetsController.isAppearanceLightNavigationBars = false
+
+            androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(webView) { view, insets ->
+                val statusInsets = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.statusBars())
+                val navInsets = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.navigationBars())
+                val density = view.context.resources.displayMetrics.density
+                
+                val topDp = (statusInsets.top / density).toInt()
+                val bottomDp = (navInsets.bottom / density).toInt()
+
+                val script = """
+                    window.safeAreaInsetTop = ${topDp};
+                    window.safeAreaInsetBottom = ${bottomDp};
+                    if (typeof window.setSafeAreaInsets === 'function') {
+                        window.setSafeAreaInsets(${topDp}, ${bottomDp});
+                    } else {
+                        document.documentElement.style.setProperty('--safe-area-inset-top', '${topDp}px');
+                        document.documentElement.style.setProperty('--safe-area-inset-bottom', '${bottomDp}px');
+                    }
+                """.trimIndent()
+                
+                view.post {
+                    webView.evaluateJavascript(script, null)
+                }
+                insets
+            }
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error setting edge-to-edge window: ${e.message}")
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {

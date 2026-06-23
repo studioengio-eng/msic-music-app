@@ -182,6 +182,25 @@ export default function MusicApp() {
   const RADIO_BUFFER_SIZE = 3;
   const REFILL_BEFORE_END_MS = 55_000;
 
+  // Safe area insets syncing (preserves properties across Next.js hydration)
+  useEffect(() => {
+    const applySafeInsets = (top: number, bottom: number) => {
+      document.documentElement.style.setProperty('--safe-area-inset-top', `${top}px`);
+      document.documentElement.style.setProperty('--safe-area-inset-bottom', `${bottom}px`);
+    };
+
+    const w = window as any;
+    w.setSafeAreaInsets = (top: number, bottom: number) => {
+      w.safeAreaInsetTop = top;
+      w.safeAreaInsetBottom = bottom;
+      applySafeInsets(top, bottom);
+    };
+
+    if (typeof w.safeAreaInsetTop === 'number' && typeof w.safeAreaInsetBottom === 'number') {
+      applySafeInsets(w.safeAreaInsetTop, w.safeAreaInsetBottom);
+    }
+  }, []);
+
   type RadioQueueItem = { track: Track; url: string; thumbnail?: string };
   const radioQueueRef = useRef<RadioQueueItem[]>([]);
   const radioQueuedIdsRef = useRef<Set<string>>(new Set());
@@ -661,6 +680,38 @@ export default function MusicApp() {
     }
   };
 
+  const pushPlaylistQueueToNative = async (queue: Track[], currentIndex: number) => {
+    if (!isTauriMobile() || queue.length === 0) return;
+    try {
+      let upcoming: Track[] = [];
+      if (shuffleOrderRef.current && queue.length > 1) {
+        const startPos = shufflePosRef.current + 1;
+        for (let p = startPos; p < shuffleOrderRef.current.length; p++) {
+          const idx = shuffleOrderRef.current[p];
+          if (queue[idx]) {
+            upcoming.push(queue[idx]);
+          }
+        }
+      } else {
+        upcoming = queue.slice(currentIndex + 1);
+      }
+
+      await invoke('plugin:player|setPlaylistQueue', {
+        itemsJson: JSON.stringify(
+          upcoming.map((t) => ({
+            url: t.youtubeUrl || (t.videoId ? `https://www.youtube.com/watch?v=${t.videoId}` : ''),
+            title: t.title,
+            artist: t.artist,
+            thumbnail: t.cover || '',
+            duration: t.duration || 0,
+          })),
+        ),
+      });
+    } catch (e) {
+      console.error("[Player] Error pushing playlist queue to native:", e);
+    }
+  };
+
   const clearNativeRadioPrefetch = () => {
     if (!isTauriMobile()) return;
     void invoke('plugin:player|clearRadioPrefetch').catch(() => {});
@@ -842,6 +893,9 @@ export default function MusicApp() {
 
   useEffect(() => {
     repeatModeRef.current = repeatMode;
+    if (audioRef.current) {
+      audioRef.current.loop = (repeatMode === 'one');
+    }
     if (isTauriMobile()) {
       void invoke('plugin:player|setRepeatMode', { mode: repeatMode }).catch(() => {});
     }
@@ -1442,7 +1496,6 @@ export default function MusicApp() {
     cancelSecondaryTasks();
     const usePlaylistQueue =
       queueMode === 'playlist' &&
-      activeViewRef.current !== 'search' &&
       queueContext.length > 1;
     const mode = usePlaylistQueue ? 'playlist' : 'radio';
 
@@ -1476,6 +1529,8 @@ export default function MusicApp() {
     playedInSessionRef.current.add(track.id);
     if (mode === 'radio') {
       rememberRadioArtist(track);
+    } else if (mode === 'playlist') {
+      void pushPlaylistQueueToNative(playbackQueueRef.current, queueIndexRef.current);
     }
 
     let playingTrack = { ...track };
@@ -1497,8 +1552,10 @@ export default function MusicApp() {
       audioRef.current.pause();
       audioRef.current.removeAttribute('src');
       audioRef.current.load();
+      audioRef.current.loop = (repeatModeRef.current === 'one');
     } else {
       const newAudio = new Audio();
+      newAudio.loop = (repeatModeRef.current === 'one');
       newAudio.addEventListener('ended', () => {
         setTrackEndedFlag(prev => prev + 1);
       });
@@ -1780,7 +1837,7 @@ export default function MusicApp() {
       }
 
       const usePlaylistQueue =
-        queueModeRef.current === 'playlist' && activeViewRef.current !== 'search';
+        queueModeRef.current === 'playlist';
 
       if (usePlaylistQueue) {
         const queue = playbackQueueRef.current;
@@ -1859,6 +1916,9 @@ export default function MusicApp() {
       } else {
         shuffleOrderRef.current = null;
         shufflePosRef.current = 0;
+      }
+      if (queueModeRef.current === 'playlist') {
+        void pushPlaylistQueueToNative(playbackQueueRef.current, queueIndexRef.current);
       }
       return next;
     });
@@ -2252,7 +2312,7 @@ export default function MusicApp() {
           {activeView === 'search' && (
             <motion.div key="search" className={s.viewContainer} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
 
-              <div style={{ height: '72px', marginBottom: '8px' }} />
+              <div style={{ height: 'calc(72px + var(--safe-area-inset-top, 0px))', marginBottom: '8px' }} />
 
               <div className={s.contentArea}>
                 {isLoading && searchResults.length === 0 ? (
@@ -2457,7 +2517,9 @@ export default function MusicApp() {
         onClick={() => { if (activeView !== 'search') setActiveView('search'); }}
         initial={false}
         animate={{
-          top: activeView === 'search' ? 'calc(24px + env(safe-area-inset-top, 32px))' : 'calc(100vh - 66px)',
+          top: activeView === 'search' 
+            ? 'calc(24px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))' 
+            : 'calc(100vh - 66px - var(--safe-area-inset-bottom, 0px))',
           left: activeView === 'search' ? '72px' : '118px',
           right: activeView === 'search' ? '20px' : '12px',
         }}
@@ -2500,7 +2562,7 @@ export default function MusicApp() {
             exit={{ opacity: 0, scale: 0, x: -10 }}
             transition={{ type: 'spring', damping: 22, stiffness: 300, delay: 0.1 }}
             onClick={() => setActiveView('home')}
-            style={{ position: 'fixed', top: 'calc(24px + env(safe-area-inset-top, 32px))', left: '20px', zIndex: 201 }}
+            style={{ position: 'fixed', top: 'calc(24px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))', left: '20px', zIndex: 201 }}
             aria-label="Volver"
           >
             <ArrowLeft size={18} color="#fff" />
@@ -2773,20 +2835,14 @@ export default function MusicApp() {
                         onClick={() => {
                           const updated = savedPlaylists.map(p => {
                             if (p.id === playlist.id) {
-                              if (!p.tracks.find(t => t.id === currentTrack.id)) {
-                                return { ...p, tracks: [...p.tracks, currentTrack] };
-                              } else {
-                                showToast('Esta canción ya está en ' + playlist.title);
-                              }
+                              return { ...p, tracks: [...p.tracks, currentTrack] };
                             }
                             return p;
                           });
                           setSavedPlaylists(updated);
                           localStorage.setItem('saved-playlists', JSON.stringify(updated));
                           setShowAddToPlaylistModal(false);
-                          if (!updated.find(p => p.id === playlist.id)?.tracks.find(t => t.id === currentTrack.id)) {
-                             showToast('Añadido a ' + playlist.title);
-                          }
+                          showToast('Añadido a ' + playlist.title);
                         }}
                       >
                         <div className={s.playlistOptionImgWrap}>

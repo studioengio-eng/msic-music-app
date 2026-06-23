@@ -114,31 +114,47 @@ object PlaybackBridge {
     """.trimIndent()
 
     private fun dispatchTrackChangedToWebView(attempt: Int) {
-        val view = webView ?: return
+        val view = webView
+        if (view == null) {
+            if (pendingTrackChanged && attempt < maxRetries) {
+                scheduleTrackChangedRetry(attempt + 1)
+            }
+            return
+        }
         view.post {
             try {
                 view.evaluateJavascript(trackChangedScript) { result ->
                     if (result == "true") {
                         clearPendingTrackChanged()
+                    } else {
+                        if (pendingTrackChanged && attempt < maxRetries) {
+                            scheduleTrackChangedRetry(attempt + 1)
+                        }
                     }
                 }
             } catch (_: Exception) {
-                /* ignore */
+                if (pendingTrackChanged && attempt < maxRetries) {
+                    scheduleTrackChangedRetry(attempt + 1)
+                }
             }
             if (backgroundPlaybackActive) {
                 view.onResume()
             }
         }
-        if (pendingTrackChanged && attempt < maxRetries) {
-            trackChangedRetry = attempt + 1
-            handler.postDelayed({ dispatchTrackChangedToWebView(attempt + 1) }, 500L)
-        }
+    }
+
+    private fun scheduleTrackChangedRetry(nextAttempt: Int) {
+        trackChangedRetry = nextAttempt
+        if (!pendingTrackChanged || nextAttempt >= maxRetries) return
+        handler.postDelayed({ dispatchTrackChangedToWebView(nextAttempt) }, 500L)
     }
 
     private fun dispatchEndedToWebView(attempt: Int) {
         val view = webView
         if (view == null) {
-            scheduleRetry(attempt)
+            if (pendingEnded && attempt < maxRetries) {
+                scheduleRetry(attempt + 1)
+            }
             return
         }
 
@@ -147,24 +163,25 @@ object PlaybackBridge {
                 view.evaluateJavascript(endedScript) { result ->
                     if (result == "true") {
                         clearPendingEnded()
+                    } else {
+                        if (pendingEnded && attempt < maxRetries) {
+                            scheduleRetry(attempt + 1)
+                        }
                     }
                 }
             } catch (_: Exception) {
-                /* ignore */
+                if (pendingEnded && attempt < maxRetries) {
+                    scheduleRetry(attempt + 1)
+                }
             }
             if (backgroundPlaybackActive) {
                 view.onResume()
             }
         }
-
-        if (pendingEnded && attempt < maxRetries) {
-            scheduleRetry(attempt + 1)
-        }
     }
 
     private fun scheduleRetry(nextAttempt: Int) {
         retryAttempt = nextAttempt
-        handler.removeCallbacksAndMessages(null)
         if (!pendingEnded || nextAttempt >= maxRetries) return
         handler.postDelayed({ dispatchEndedToWebView(nextAttempt) }, 400L)
     }

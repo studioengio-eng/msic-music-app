@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicLong
 object PlayerManager {
     private const val TAG = "PlayerManager"
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private var wakeLock: android.os.PowerManager.WakeLock? = null
 
     var player: ExoPlayer? = null
         private set
@@ -31,12 +32,26 @@ object PlayerManager {
     @Suppress("UNUSED_PARAMETER")
     fun initialize(context: Context, newPlayer: ExoPlayer) {
         player = newPlayer
+        try {
+            val powerManager = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+            wakeLock = powerManager.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "MSIC::PlayerManagerWakeLock")
+            wakeLock?.setReferenceCounted(false)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to create transition WakeLock: ${e.message}")
+        }
 
         newPlayer.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
                     Player.STATE_ENDED -> {
-                        PlaybackBridge.onPlaybackEnded()
+                        if (QueueManager.hasNext()) {
+                            Log.d(TAG, "Native queue has next track, playing natively")
+                            playNextInQueue()
+                            PlaybackBridge.notifyTrackChanged()
+                        } else {
+                            Log.d(TAG, "Native queue is empty, notifying WebView")
+                            PlaybackBridge.onPlaybackEnded()
+                        }
                     }
                     Player.STATE_READY -> {
                         Log.d(TAG, "Player ready, duration: ${newPlayer.duration}")
@@ -109,24 +124,39 @@ object PlayerManager {
         playbackJob?.cancel()
         preloadJob?.cancel()
 
+        try {
+            wakeLock?.acquire(15000L) // Keep CPU awake for 15s to resolve/prepare track in background
+        } catch (e: Exception) {
+            Log.e(TAG, "Error acquiring WakeLock: ${e.message}")
+        }
+
         playbackJob = scope.launch {
-            val existingStream = track.streamUrl?.takeIf { it.isNotBlank() }
-            val url = existingStream ?: async(Dispatchers.IO) {
-                resolveStreamUrl("${track.artist} - ${track.title}", track.youtubeUrl)
-            }.await()
+            try {
+                val existingStream = track.streamUrl?.takeIf { it.isNotBlank() }
+                val url = existingStream ?: async(Dispatchers.IO) {
+                    resolveStreamUrl("${track.artist} - ${track.title}", track.youtubeUrl)
+                }.await()
 
-            if (generation != playbackGeneration.get()) return@launch
+                if (generation != playbackGeneration.get()) return@launch
 
-            if (url != null) {
-                track.streamUrl = url
-                player?.let { p ->
-                    p.setMediaItem(track.toMediaItem())
-                    p.prepare()
-                    p.play()
+                if (url != null) {
+                    track.streamUrl = url
+                    player?.let { p ->
+                        p.setMediaItem(track.toMediaItem())
+                        p.prepare()
+                        p.play()
+                        PlaybackBridge.setBackgroundPlaybackActive(true)
+                    }
+                } else {
+                    Log.e(TAG, "Could not resolve stream for: ${track.title}")
+                    PlaybackBridge.onPlaybackEnded()
                 }
-            } else {
-                Log.e(TAG, "Could not resolve stream for: ${track.title}")
-                PlaybackBridge.onPlaybackEnded()
+            } finally {
+                if (wakeLock?.isHeld == true) {
+                    try {
+                        wakeLock?.release()
+                    } catch (_: Exception) {}
+                }
             }
         }
     }
@@ -166,14 +196,15 @@ object PlayerManager {
         }
     }
 
-    fun playNextInQueue() {
+    fun playNextInQueue(forceNext: Boolean = false) {
         preloadJob?.cancel()
-        val next = QueueManager.nextTrack() ?: return
+        val next = QueueManager.nextTrack(forceNext) ?: return
         if (next.streamUrl != null) {
             player?.let { p ->
                 p.setMediaItem(next.toMediaItem())
                 p.prepare()
                 p.play()
+                PlaybackBridge.setBackgroundPlaybackActive(true)
             }
         } else {
             playTrack(next)
@@ -198,6 +229,7 @@ object PlayerManager {
 
     fun pause() {
         player?.pause()
+        PlaybackBridge.setBackgroundPlaybackActive(false)
     }
 
     fun resume() {
@@ -210,12 +242,21 @@ object PlayerManager {
         preloadJob?.cancel()
         player?.stop()
         player?.clearMediaItems()
+        PlaybackBridge.setBackgroundPlaybackActive(false)
     }
 
     fun getVolume(): Float = player?.volume ?: 1f
 
     fun setVolume(volume: Float) {
         player?.volume = volume.coerceIn(0f, 1f)
+    }
+
+    fun setRepeatMode(mode: String) {
+        val p = player ?: return
+        p.repeatMode = when (mode) {
+            "one" -> Player.REPEAT_MODE_ONE
+            else -> Player.REPEAT_MODE_OFF
+        }
     }
 
     fun release() {
